@@ -2,37 +2,57 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from pypdf import PdfReader
 
-from dotenv import load_dotenv
-load_dotenv()
+
+# --------------------------------------------------
+# Configuration
+# --------------------------------------------------
+
+BASE_DIR = Path(__file__).resolve().parent
+
+load_dotenv(BASE_DIR / ".env")
+
 key = os.getenv("GOOGLE_API_KEY")
 model = os.getenv("MODEL")
 
 if not key:
     raise ValueError("GOOGLE_API_KEY is missing from your .env file.")
+
 if not model:
     raise ValueError("MODEL is missing from your .env file.")
 
 google_Client = genai.Client(api_key=key)
 
-BASE_DIR = Path(__file__).resolve().parent
 
-reader = PdfReader("C:\\Users\\aksha\\Archive\\VS Code\\Google  ADK\\Digital Twin\\assets\\DP_Resume.pdf")
+# --------------------------------------------------
+# Load your resume and summary
+# --------------------------------------------------
+
+RESUME_PATH = BASE_DIR / "assets" / "DP_Resume.pdf"
+SUMMARY_PATH = BASE_DIR / "assets" / "summary.txt"
+
+reader = PdfReader(str(RESUME_PATH))
+
 myData = ""
+
 for page in reader.pages:
     text = page.extract_text()
+
     if text:
         myData += text + "\n"
 
 
-
-with open("C:\\Users\\aksha\\Archive\\VS Code\\Google  ADK\\Digital Twin\\assets\\summary.txt", "r", encoding="utf-8") as f:
+with open(SUMMARY_PATH, "r", encoding="utf-8") as f:
     summary = f.read()
 
 
+# --------------------------------------------------
+# System prompt
+# --------------------------------------------------
 
 system_prompt = f"""
 # Your role
@@ -79,6 +99,10 @@ Here is the person's resume and professional background:
 """
 
 
+# --------------------------------------------------
+# Tool: Save visitor details
+# --------------------------------------------------
+
 def record_user_details_tool(
     email: str,
     name: str = "Name not provided",
@@ -99,6 +123,10 @@ def record_user_details_tool(
 
     return "User details recorded successfully."
 
+
+# --------------------------------------------------
+# Tool: Save unanswered questions
+# --------------------------------------------------
 
 def record_unknown_question_tool(question: str) -> str:
     """Save a question the digital twin cannot answer."""
@@ -121,12 +149,14 @@ def record_unknown_question_tool(question: str) -> str:
 
 history = []
 
+
 # --------------------------------------------------
 # Chat function
 # --------------------------------------------------
 
 def chat(message, history):
-    # Add the user's message
+    """Send a message to Gemini and update the conversation history."""
+
     history.append(
         types.Content(
             role="user",
@@ -134,8 +164,6 @@ def chat(message, history):
         )
     )
 
-    # Send the conversation to Gemini.
-    # Gemini can automatically execute the supplied Python tools.
     response = google_Client.models.generate_content(
         model=model,
         contents=history,
@@ -150,7 +178,7 @@ def chat(message, history):
 
     answer = response.text or "I couldn't generate a response."
 
-    # Save Gemini's response to the conversation history
+    # Preserve Gemini's response content in the conversation.
     if response.candidates:
         model_content = response.candidates[0].content
 
